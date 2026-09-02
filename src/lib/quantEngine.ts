@@ -184,9 +184,9 @@ export function calculateMTM(
 }
 
 export function tickSpot(currentSpot: number): number {
-  const drift = (INITIAL_NIFTY_SPOT - currentSpot) * 0.04;
-  const shock = (Math.random() - 0.48) * 9.5;
-  return roundPaisa(Math.max(23880, Math.min(24580, currentSpot + drift + shock)));
+  const drift = (INITIAL_NIFTY_SPOT - currentSpot) * 0.06;
+  const shock = (Math.random() - 0.46) * 16;
+  return roundPaisa(Math.max(23940, Math.min(24520, currentSpot + drift + shock)));
 }
 
 /** Spot delta reprices CE LTPs; sold premium decays faster (theta carry). */

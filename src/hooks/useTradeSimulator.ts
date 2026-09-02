@@ -34,26 +34,40 @@ export interface CandleBar {
   close: number;
 }
 
-function seedCandles(endSpot: number, count = 160): CandleBar[] {
-  const now = Math.floor(Date.now() / 1000);
-  const start = now - count * 60;
-  let price = endSpot - 90;
+export const LIVE_BAR_SECONDS = 5;
+
+function alignBarTime(seconds: number): number {
+  return seconds - (seconds % LIVE_BAR_SECONDS);
+}
+
+function seedCandles(endSpot: number, count = 90): CandleBar[] {
+  const end = alignBarTime(Math.floor(Date.now() / 1000));
+  const start = end - count * LIVE_BAR_SECONDS;
+  let price = endSpot - 55;
   const bars: CandleBar[] = [];
 
   for (let i = 0; i < count; i += 1) {
     const remaining = count - i;
     const drift = (endSpot - price) / remaining;
-    const noise = (Math.sin(i / 6) + (i % 4) / 4 - 0.45) * 12;
+    const wave = Math.sin(i / 4.2) * 11;
+    const noise = ((i * 13) % 7) - 3;
     const open = price;
-    const close = open + drift + noise;
+    const close = open + drift + wave * 0.35 + noise * 0.8;
     bars.push({
-      time: start + i * 60,
+      time: start + i * LIVE_BAR_SECONDS,
       open,
-      high: Math.max(open, close) + 5 + (i % 3),
-      low: Math.min(open, close) - 5 - (i % 2),
+      high: Math.max(open, close) + 4 + (i % 3),
+      low: Math.min(open, close) - 4 - (i % 2),
       close,
     });
     price = close;
+  }
+
+  const last = bars[bars.length - 1];
+  if (last) {
+    last.close = endSpot;
+    last.high = Math.max(last.high, endSpot);
+    last.low = Math.min(last.low, endSpot);
   }
 
   return bars;
@@ -160,16 +174,12 @@ export function useTradeSimulator() {
   }, [closePosition]);
 
   useEffect(() => {
-    if (!running) return;
-
     const prefersReduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    const intervalMs = prefersReduced ? 4000 : 1500;
+    const intervalMs = prefersReduced ? 1400 : 400;
 
     const timer = window.setInterval(() => {
-      if (!runningRef.current) return;
-
       const lastSpot = spotRef.current;
       const nextSpot = tickSpot(lastSpot);
       const spotDelta = nextSpot - lastSpot;
@@ -180,8 +190,8 @@ export function useTradeSimulator() {
       setCandles((bars) => {
         const last = bars[bars.length - 1];
         if (!last) return bars;
-        const now = Math.floor(Date.now() / 1000);
-        if (now - last.time < 60) {
+        const bucket = alignBarTime(Math.floor(Date.now() / 1000));
+        if (bucket <= last.time) {
           return [
             ...bars.slice(0, -1),
             {
@@ -193,9 +203,9 @@ export function useTradeSimulator() {
           ];
         }
         return [
-          ...bars.slice(-180),
+          ...bars.slice(-120),
           {
-            time: now,
+            time: bucket,
             open: last.close,
             high: Math.max(last.close, nextSpot),
             low: Math.min(last.close, nextSpot),
@@ -205,7 +215,9 @@ export function useTradeSimulator() {
       });
 
       const liveBasket = basketRef.current;
-      if (!liveBasket || liveBasket.status !== "ACTIVE") return;
+      if (!runningRef.current || !liveBasket || liveBasket.status !== "ACTIVE") {
+        return;
+      }
 
       const nextLegs = tickLegPremiums(liveBasket.legs, spotDelta);
       const nextBasket: BasketPosition = {
@@ -234,7 +246,7 @@ export function useTradeSimulator() {
     }, intervalMs);
 
     return () => window.clearInterval(timer);
-  }, [closePosition, running]);
+  }, [closePosition]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 1000);
@@ -242,7 +254,8 @@ export function useTradeSimulator() {
   }, []);
 
   const sessionChange = spot - (INITIAL_NIFTY_SPOT - INITIAL_NIFTY_CHANGE);
-  const sessionChangePct = (sessionChange / (INITIAL_NIFTY_SPOT - INITIAL_NIFTY_CHANGE)) * 100;
+  const sessionChangePct =
+    (sessionChange / (INITIAL_NIFTY_SPOT - INITIAL_NIFTY_CHANGE)) * 100;
   const overlays = basket ? getStrikeOverlay(basket.legs) : [];
   const legs = basket ? displayLegs(basket.legs) : [];
 

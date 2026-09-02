@@ -8,6 +8,7 @@ import {
   LineStyle,
   createChart,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -22,11 +23,24 @@ interface NiftyChartProps {
   overlays: StrikeOverlay[];
 }
 
+function toCandle(bar: CandleBar) {
+  return {
+    time: bar.time as UTCTimestamp,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+  };
+}
+
 export default function NiftyChart({ spot, candles, overlays }: NiftyChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const overlayKey = overlays.map((item) => item.price).join(",");
+  const seededRef = useRef(false);
+  const lastBarTimeRef = useRef<number | null>(null);
+  const overlayLinesRef = useRef<IPriceLine[]>([]);
+  const overlayKey = overlays.map((item) => `${item.price}:${item.title}`).join("|");
   const atm = roundToNearest100(spot);
 
   useEffect(() => {
@@ -53,12 +67,16 @@ export default function NiftyChart({ spot, candles, overlays }: NiftyChartProps)
       },
       rightPriceScale: {
         borderColor: "#1e293b",
-        autoScale: false,
+        autoScale: overlays.length === 0,
+        scaleMargins: { top: 0.08, bottom: 0.12 },
       },
       timeScale: {
         borderColor: "#1e293b",
         timeVisible: true,
-        secondsVisible: false,
+        secondsVisible: true,
+        rightOffset: 4,
+        barSpacing: 10,
+        minBarSpacing: 6,
       },
     });
 
@@ -69,16 +87,25 @@ export default function NiftyChart({ spot, candles, overlays }: NiftyChartProps)
       borderDownColor: "#ef4444",
       wickUpColor: "#6ee7b7",
       wickDownColor: "#f87171",
+      lastValueVisible: true,
+      priceLineVisible: true,
+      priceLineColor: "#34d399",
+      priceLineWidth: 1,
     });
 
     chartRef.current = chart;
     seriesRef.current = series;
+    seededRef.current = false;
+    lastBarTimeRef.current = null;
 
     return () => {
+      overlayLinesRef.current = [];
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
     };
+    // Chart instance is created once; overlay range is applied in a later effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -86,42 +113,34 @@ export default function NiftyChart({ spot, candles, overlays }: NiftyChartProps)
     const chart = chartRef.current;
     if (!series || !chart || candles.length === 0) return;
 
-    series.setData(
-      candles.map((bar) => ({
-        time: bar.time as UTCTimestamp,
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        close: bar.close,
-      })),
-    );
-
     const last = candles[candles.length - 1];
-    if (last) {
-      series.update({
-        time: last.time as UTCTimestamp,
-        open: last.open,
-        high: last.high,
-        low: last.low,
-        close: last.close,
+    if (!last) return;
+
+    if (!seededRef.current) {
+      series.setData(candles.map(toCandle));
+      seededRef.current = true;
+      lastBarTimeRef.current = last.time;
+      chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, candles.length - 42),
+        to: candles.length + 2,
       });
+      return;
     }
 
-    chart.priceScale("right").setVisibleRange({
-      from: atm - 380,
-      to: Math.max(atm + 860, ...overlays.map((item) => item.price + 80)),
-    });
-  }, [atm, candles, overlays]);
+    series.update(toCandle(last));
+    lastBarTimeRef.current = last.time;
+    chart.timeScale().scrollToRealTime();
+  }, [candles]);
 
   useEffect(() => {
     const series = seriesRef.current;
-    if (!series) return;
+    const chart = chartRef.current;
+    if (!series || !chart) return;
 
-    for (const line of series.priceLines()) {
+    for (const line of overlayLinesRef.current) {
       series.removePriceLine(line);
     }
-
-    for (const level of overlays) {
+    overlayLinesRef.current = overlays.map((level) =>
       series.createPriceLine({
         price: level.price,
         color: level.color,
@@ -129,9 +148,20 @@ export default function NiftyChart({ spot, candles, overlays }: NiftyChartProps)
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
         title: level.title,
+      }),
+    );
+
+    if (overlays.length > 0) {
+      chart.priceScale("right").applyOptions({ autoScale: false });
+      chart.priceScale("right").setVisibleRange({
+        from: atm - 220,
+        to: atm + 720,
       });
+      return;
     }
-  }, [overlayKey, overlays]);
+
+    chart.priceScale("right").applyOptions({ autoScale: true });
+  }, [atm, overlayKey, overlays]);
 
   return (
     <section
@@ -141,15 +171,19 @@ export default function NiftyChart({ spot, candles, overlays }: NiftyChartProps)
       <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-2.5">
         <div>
           <p className="font-mono text-[10px] tracking-[0.18em] text-slate-500">
-            NIFTY 50 SPOT · 1m STREAM
+            NIFTY 50 SPOT · LIVE TICK
           </p>
           <p className="mt-0.5 font-mono text-sm tabular-nums text-slate-100">
             {formatIndex(spot)}
           </p>
         </div>
-        <p className="font-mono text-[10px] tracking-wide text-slate-500">
-          Simulated ticks
-        </p>
+        <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 font-mono text-[10px] tracking-wide text-emerald-300">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-emerald-400 opacity-75 motion-reduce:animate-none" />
+            <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+          </span>
+          MARKET LIVE
+        </span>
       </div>
 
       {overlays.length > 0 && (
