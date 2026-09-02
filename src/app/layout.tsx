@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Syncra Quant Engine · Nifty 1:3:2",
   description:
-    "Syncra Systems Nifty 1:3:2 execution platform for HNI ratio-spread monitoring.",
+    "Syncra Systems LLP Nifty 1:3:2 hedged ratio-spread execution terminal.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -24,7 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-[#090D16] font-sans text-slate-100">
+      <body className="min-h-full bg-[#080C14] font-sans text-slate-100">
         {children}
       </body>
     </html>

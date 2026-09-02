@@ -20,3 +20,10 @@ export function formatIndex(value: number, fractionDigits = 2) {
     maximumFractionDigits: fractionDigits,
   }).format(value);
 }
+
+export function formatSignedInr(value: number, fractionDigits = 2) {
+  const absolute = formatInr(Math.abs(value), fractionDigits);
+  if (value > 0) return `+${absolute}`;
+  if (value < 0) return `-${absolute}`;
+  return absolute;
+}
