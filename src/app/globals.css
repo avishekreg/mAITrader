@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+:root {
+  --background: #090d16;
+  --foreground: #f8fafc;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-obsidian: #090d16;
+  --color-crimson-400: #f43f5e;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+@keyframes pulse-live {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(2.15);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.15);
+    opacity: 0;
+  }
+}
+
+@utility animate-pulse-live {
+  animation: pulse-live 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-live {
+    animation: none;
+  }
+}
